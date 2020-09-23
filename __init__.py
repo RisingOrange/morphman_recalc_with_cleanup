@@ -2,7 +2,7 @@ import importlib
 from itertools import chain
 
 from aqt import mw
-from aqt.utils import tooltip
+from aqt.utils import tooltip, showText
 from PyQt5.QtWidgets import *
 
 # cards that match these queries will be deleted
@@ -25,6 +25,11 @@ def setup_toolbar_menu():
     # Add "Run" button
     a = QAction('&Run', mw)
     a.triggered.connect(morphman_recalc_with_cleanup)
+    morphman_cleanup_menu.addAction(a)
+
+    # Add "Just clean up" button
+    a = QAction('&Just clean up', mw)
+    a.triggered.connect(cleanup)
     morphman_cleanup_menu.addAction(a)    
 
 def morphman_recalc_with_cleanup():
@@ -40,13 +45,48 @@ def run_mm_recalc():
     mm_main.main()
 
 def cleanup():
+    note_ids_from_queries = remove_query_matches()
+    note_ids_from_duplicates = remove_unnecessary_duplicates()
+    return note_ids_from_queries + note_ids_from_duplicates
+
+def remove_query_matches():
     note_ids = set(chain(*[
         mw.col.find_notes(query)
         for query in queries
     ]))
     mw.col.remNotes(note_ids)
-    return note_ids
+    return list(note_ids)
 
+def remove_unnecessary_duplicates():
+
+    def notes_with_morph_ids(morph, new=False):
+        return mw.col.find_notes(f'tag:morphman "TargetMorph:{morph}" {"is:new" if new else ""}')
+
+    notes_to_remove = []
+    notes_to_process = set(mw.col.find_notes('tag:morphman TargetMorph:_* edited:2'))
+    while notes_to_process:
+        cur_note = next(iter(notes_to_process))
+        cur_morph = mw.col.getNote(cur_note)['TargetMorph']
+
+        notes_with_cur_morph = set(notes_with_morph_ids(cur_morph))
+        new_notes_with_cur_morph = set(notes_with_morph_ids(cur_morph, new=True))
+        if len(notes_with_cur_morph) == len(new_notes_with_cur_morph):
+            # if all notes are new, pick random note to keep, delete others
+            note_to_keep = next(iter(notes_with_cur_morph))
+            notes_to_remove.extend(notes_with_cur_morph - set([note_to_keep]))
+        else:
+            # else, delete all new ones
+            notes_to_remove.extend(new_notes_with_cur_morph)
+            notes_to_process.difference_update(notes_with_cur_morph)
+
+    if notes_to_remove:
+        showText('\n'.join(
+            mw.col.getNote(note)['TargetMorph']
+            for note in notes_to_remove
+        ))
+        # mw.col.remNotes(notes_to_remove)
+        
+    return notes_to_remove
 
 def fix_movies2anki_name_mismatch():
 
