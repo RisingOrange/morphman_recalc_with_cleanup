@@ -1,9 +1,10 @@
 import importlib
-from itertools import chain
+import re
 from collections import defaultdict
+from itertools import chain
 
 from aqt import mw
-from aqt.utils import tooltip, showText
+from aqt.utils import showText, tooltip
 from PyQt5.QtWidgets import *
 
 # only notes with this tag will be affected by the cleanup
@@ -23,6 +24,16 @@ movies2anki_for_mmm_note_type_id = 1598115874278
 # number of cards that will be searched for morph dupes
 # they are taken from the top of cards sorted by due date (ascending)
 num_notes_searched_for_morph_dupes = 200
+
+# number of cards that will be searched for name morphs
+# they are taken from the top of cards sorted by due date (ascending)
+num_notes_searched_for_name_morphs = 200
+
+# only notes with this field will be searched for names as target morphs
+field_searched_for_name_morphs = 'Front'
+
+# notes will be marked with this tag as already known (name morphs)
+mm_already_known_tag = 'mm_alreadyKnown'
 
 addon_name = "Morphman Recalc with Cleanup"
 
@@ -44,7 +55,6 @@ def setup_toolbar_menu():
 def morphman_recalc_with_cleanup_action():
     run_mm_recalc()
     note_ids = cleanup()
-    fix_movies2anki_name_mismatch()
     mw.reset()
     
     tooltip(f"Deleted {len(note_ids)} notes")
@@ -62,6 +72,8 @@ def run_mm_recalc():
 def cleanup():
     note_ids_from_queries = remove_query_matches()
     note_ids_from_morph_dupes = remove_unnecessary_morph_dupes()
+    fix_movies2anki_name_mismatch()
+    handle_name_morphs()
     return note_ids_from_queries + note_ids_from_morph_dupes
 
 def remove_query_matches():
@@ -72,19 +84,23 @@ def remove_query_matches():
     mw.col.remNotes(note_ids)
     return list(note_ids)
 
-def remove_unnecessary_morph_dupes():
-
-    notes_to_be_removed = []
-
-    # only process n new notes of which the cards are due next
-    notes_to_be_processed = list(set([
+def new_vocab_notes():
+    # returns new vocab notes, sorted by due date (ascending)
+    return list(set([
         mw.col.getCard(id).nid
         for id in
         mw.col.find_cards(
             f'"tag:{mm_tag}" TargetMorph:_* is:new',
             order="due asc"
         )
-    ]))[:num_notes_searched_for_morph_dupes]
+    ]))
+
+def remove_unnecessary_morph_dupes():
+
+    notes_to_be_removed = []
+
+    # only process n new notes of which the cards are due next
+    notes_to_be_processed = new_vocab_notes()[:num_notes_searched_for_morph_dupes]
     
     note_to_morph = {
         note : mw.col.getNote(note)['TargetMorph']
@@ -126,5 +142,39 @@ def fix_movies2anki_name_mismatch():
 
         note.flush()
 
+def handle_name_morphs():
+    # buries and tags notes as already known when their target morph is a name
+    # a very simple heuristic is used to identify names, which only works in
+    # languages where most words are lower case, except for names
+
+    def morph(note):
+        return mw.col.getNote(note)['TargetMorph']
+
+    def text(note):
+        try:
+            return mw.col.getNote(note)[field_searched_for_name_morphs]
+        except KeyError:
+            return ''
+
+    notes_with_name_morphs = []
+    notes_to_be_processed = new_vocab_notes()[:num_notes_searched_for_name_morphs]
+    for note in notes_to_be_processed:
+        # if the morph is capitalized and not at the beginning of a sentence,
+        # assume it's a name
+        if re.match(f'[\w,; ]+{morph(note).capitalize()}', text(note)):
+            notes_with_name_morphs.append(note)
+
+    showText('\n'.join(
+        mw.col.getNote(note)['TargetMorph']
+        for note in notes_with_name_morphs
+    ))
+
+    for note in notes_with_name_morphs:
+        note_obj = mw.col.getNote(note)
+        note_obj.addTag(mm_already_known_tag)
+        note_obj.flush()
+
+    for note in notes_with_name_morphs:
+        mw.col.sched.buryNote(note)
 
 setup_toolbar_menu()
