@@ -77,14 +77,15 @@ def remove_unnecessary_duplicates():
         else:
             # else, delete all new ones
             notes_to_remove.extend(new_notes_with_cur_morph)
-            notes_to_process.difference_update(notes_with_cur_morph)
+        
+        notes_to_process.difference_update(notes_with_cur_morph)
 
     if notes_to_remove:
         showText('\n'.join(
             mw.col.getNote(note)['TargetMorph']
             for note in notes_to_remove
         ))
-        # mw.col.remNotes(notes_to_remove)
+        mw.col.remNotes(notes_to_remove)
         
     return notes_to_remove
 
