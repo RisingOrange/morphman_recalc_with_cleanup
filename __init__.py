@@ -94,10 +94,10 @@ def remove_unnecessary_morph_dupes():
     for note, morph in note_to_morph.items():
         morph_to_notes[morph].append(note)
 
-    for notes in (notes for notes in morph_to_notes.values() if len(notes) > 1):
+    for notes_with_same_morph in (notes for notes in morph_to_notes.values() if len(notes) > 1):
         # pick random note to keep, delete others
-        note_to_keep = next(iter(notes))
-        notes_to_be_removed.extend(set(notes) - set([note_to_keep]))
+        note_to_keep = next(iter(notes_with_same_morph))
+        notes_to_be_removed.extend(set(notes_with_same_morph) - set([note_to_keep]))
 
     if notes_to_be_removed:
         showText(
