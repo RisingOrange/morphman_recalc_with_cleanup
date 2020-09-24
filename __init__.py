@@ -95,6 +95,9 @@ def cleanup():
     note_ids_from_morph_dupes = remove_unnecessary_morph_dupes()
     fix_movies2anki_name_mismatch()
     handle_name_morphs()
+
+    logger.debug('done cleaning up')
+
     return note_ids_from_queries + note_ids_from_morph_dupes
 
 def remove_query_matches():
