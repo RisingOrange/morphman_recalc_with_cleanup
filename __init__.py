@@ -49,6 +49,8 @@ def just_cleanup_action():
     note_ids = cleanup()
     mw.reset()
 
+    tooltip(f"Deleted {len(note_ids)} notes")
+
 def run_mm_recalc():
     mm_main = importlib.import_module('morphman_dev.morph.main')
     mm_main.main()
