@@ -78,7 +78,7 @@ def remove_unnecessary_morph_dupes():
 
     notes_to_remove = []
     notes_to_process = set(mw.col.find_notes(
-        f'"tag{mm_tag}": TargetMorph:_* edited:{remove_morph_dupes_edited_in_last_n_days}')
+        f'"tag:{mm_tag}" TargetMorph:_* edited:{remove_morph_dupes_edited_in_last_n_days}')
     )
     while notes_to_process:
         cur_note = next(iter(notes_to_process))
@@ -97,10 +97,13 @@ def remove_unnecessary_morph_dupes():
         notes_to_process.difference_update(notes_with_cur_morph)
 
     if notes_to_remove:
-        showText('\n'.join(
-            mw.col.getNote(note)['TargetMorph']
-            for note in notes_to_remove
-        ))
+        showText(
+            'These are TargetMorphs of notes that will be removed:\n' + 
+            ('\n'.join(
+                mw.col.getNote(note)['TargetMorph']
+                for note in notes_to_remove
+            ))
+        )
         mw.col.remNotes(notes_to_remove)
         
     return notes_to_remove
