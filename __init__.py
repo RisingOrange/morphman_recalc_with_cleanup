@@ -1,5 +1,6 @@
 import importlib
 from itertools import chain
+from collections import defaultdict
 
 from aqt import mw
 from aqt.utils import tooltip, showText
@@ -16,12 +17,12 @@ queries = [
     f'"tag:{mm_tag}" is:suspended',
 ]
 
-# only notes that were edited in the last n days will be checked for having morph dupes
-remove_morph_dupes_edited_in_last_n_days = 4
-
 # for fixing name mismatch between media filenames and filenames on notes
 movies2anki_for_mmm_note_type_id = 1598115874278
 
+# number of cards that will be searched for morph dupes
+# they are taken from the top of cards sorted by due date (ascending)
+num_notes_searched_for_morph_dupes = 200
 
 addon_name = "Morphman Recalc with Cleanup"
 
@@ -73,40 +74,42 @@ def remove_query_matches():
 
 def remove_unnecessary_morph_dupes():
 
-    def notes_with_morph_ids(morph, new=False):
-        return mw.col.find_notes(f'"tag:{mm_tag}" "TargetMorph:{morph}" {"is:new" if new else ""}')
+    notes_to_be_removed = []
 
-    notes_to_remove = []
-    notes_to_process = set(mw.col.find_notes(
-        f'"tag:{mm_tag}" TargetMorph:_* edited:{remove_morph_dupes_edited_in_last_n_days}')
-    )
-    while notes_to_process:
-        cur_note = next(iter(notes_to_process))
-        cur_morph = mw.col.getNote(cur_note)['TargetMorph']
+    # only process n new notes of which the cards are due next
+    notes_to_be_processed = list(set([
+        mw.col.getCard(id).nid
+        for id in
+        mw.col.find_cards(
+            f'"tag:{mm_tag}" TargetMorph:_* is:new',
+            order="due asc"
+        )
+    ]))[:num_notes_searched_for_morph_dupes]
+    
+    note_to_morph = {
+        note : mw.col.getNote(note)['TargetMorph']
+        for note in notes_to_be_processed
+    }
+    morph_to_notes = defaultdict(lambda: [])
+    for note, morph in note_to_morph.items():
+        morph_to_notes[morph].append(note)
 
-        notes_with_cur_morph = set(notes_with_morph_ids(cur_morph))
-        new_notes_with_cur_morph = set(notes_with_morph_ids(cur_morph, new=True))
-        if len(notes_with_cur_morph) == len(new_notes_with_cur_morph):
-            # if all notes are new, pick random note to keep, delete others
-            note_to_keep = next(iter(new_notes_with_cur_morph))
-            notes_to_remove.extend(new_notes_with_cur_morph - set([note_to_keep]))
-        else:
-            # else, delete all new ones
-            notes_to_remove.extend(new_notes_with_cur_morph)
-        
-        notes_to_process.difference_update(notes_with_cur_morph)
+    for notes in (notes for notes in morph_to_notes.values() if len(notes) > 1):
+        # pick random note to keep, delete others
+        note_to_keep = next(iter(notes))
+        notes_to_be_removed.extend(set(notes) - set([note_to_keep]))
 
-    if notes_to_remove:
+    if notes_to_be_removed:
         showText(
             'These are TargetMorphs of notes that will be removed:\n' + 
             ('\n'.join(
                 mw.col.getNote(note)['TargetMorph']
-                for note in notes_to_remove
+                for note in notes_to_be_removed
             ))
         )
-        mw.col.remNotes(notes_to_remove)
+        mw.col.remNotes(notes_to_be_removed)
         
-    return notes_to_remove
+    return notes_to_be_removed
 
 def fix_movies2anki_name_mismatch():
 
