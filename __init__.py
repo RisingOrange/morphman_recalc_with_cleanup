@@ -5,7 +5,7 @@ from aqt import mw
 from aqt.utils import tooltip, showText
 from PyQt5.QtWidgets import *
 
-
+# only notes with this tag will be affected by the cleanup
 mm_tag = 'morphman'
 
 # cards that match these queries will be deleted
@@ -15,6 +15,9 @@ queries = [
     f'"tag:{mm_tag}" tag:mm_tooShort',
     f'"tag:{mm_tag}" is:suspended',
 ]
+
+# only notes that were edited in the last n days will be checked for having morph dupes
+remove_morph_dupes_edited_in_last_n_days = 4
 
 # for fixing name mismatch between media filenames and filenames on notes
 movies2anki_for_mmm_note_type_id = 1598115874278
@@ -57,8 +60,8 @@ def run_mm_recalc():
 
 def cleanup():
     note_ids_from_queries = remove_query_matches()
-    note_ids_from_duplicates = remove_unnecessary_duplicates()
-    return note_ids_from_queries + note_ids_from_duplicates
+    note_ids_from_morph_dupes = remove_unnecessary_morph_dupes()
+    return note_ids_from_queries + note_ids_from_morph_dupes
 
 def remove_query_matches():
     note_ids = set(chain(*[
@@ -68,13 +71,15 @@ def remove_query_matches():
     mw.col.remNotes(note_ids)
     return list(note_ids)
 
-def remove_unnecessary_duplicates():
+def remove_unnecessary_morph_dupes():
 
     def notes_with_morph_ids(morph, new=False):
         return mw.col.find_notes(f'"tag:{mm_tag}" "TargetMorph:{morph}" {"is:new" if new else ""}')
 
     notes_to_remove = []
-    notes_to_process = set(mw.col.find_notes(f'"tag{mm_tag}": TargetMorph:_* edited:2'))
+    notes_to_process = set(mw.col.find_notes(
+        f'"tag{mm_tag}": TargetMorph:_* edited:{remove_morph_dupes_edited_in_last_n_days}')
+    )
     while notes_to_process:
         cur_note = next(iter(notes_to_process))
         cur_morph = mw.col.getNote(cur_note)['TargetMorph']
@@ -105,7 +110,7 @@ def fix_movies2anki_name_mismatch():
     def extract_file_name(line):
         return line[len('[sound:') : -1]
 
-    note_ids = mw.col.find_notes(f'mid:"{movies2anki_for_mmm_note_type_id}"')
+    note_ids = mw.col.find_notes(f'"tag:{mm_tag}" mid:"{movies2anki_for_mmm_note_type_id}"')
     for note in [ mw.col.getNote(id_) for id_ in note_ids ]:
         new_audio_file_name = extract_file_name(note['Audio Sound'])
         note['Audio'] = new_audio_file_name
