@@ -1,10 +1,13 @@
 import importlib
+import logging
+import pathlib
 import re
 from collections import defaultdict
 from itertools import chain
+from logging.handlers import RotatingFileHandler
 
 from aqt import mw
-from aqt.utils import showText, tooltip
+from aqt.utils import tooltip
 from PyQt5.QtWidgets import *
 
 # only notes with this tag will be affected by the cleanup
@@ -36,6 +39,22 @@ field_searched_for_name_morphs = 'Front'
 mm_already_known_tag = 'mm_alreadyKnown'
 
 addon_name = "Morphman Recalc with Cleanup"
+
+
+# setup logger
+logger = logging.getLogger()
+logger.setLevel('DEBUG')
+handler = RotatingFileHandler(
+    filename=pathlib.Path(__file__).parent.absolute() / 'log.log',
+    mode='w',
+    encoding='utf-8',
+    maxBytes=1000,
+    backupCount=3,
+)
+handler.setFormatter(logging.Formatter('%(asctime)s-%(message)s'))
+logger.addHandler(handler)
+
+
 
 def setup_toolbar_menu():
     # Add "Post-Morphman cleanup" submenu
@@ -70,6 +89,8 @@ def run_mm_recalc():
     mm_main.main()
 
 def cleanup():
+    logger.debug('starting cleanup...')
+
     note_ids_from_queries = remove_query_matches()
     note_ids_from_morph_dupes = remove_unnecessary_morph_dupes()
     fix_movies2anki_name_mismatch()
@@ -115,15 +136,13 @@ def remove_unnecessary_morph_dupes():
         note_to_keep = next(iter(notes_with_same_morph))
         notes_to_be_removed.extend(set(notes_with_same_morph) - set([note_to_keep]))
 
-    if notes_to_be_removed:
-        showText(
-            'These are TargetMorphs of notes that will be removed:\n' + 
-            ('\n'.join(
-                mw.col.getNote(note)['TargetMorph']
-                for note in notes_to_be_removed
-            ))
-        )
         mw.col.remNotes(notes_to_be_removed)
+
+    if notes_to_be_removed:
+        logging.debug(
+            'notes removed because of them having morph duplicates:\n' +
+            debug_note_listing(notes_to_be_removed)
+        )
         
     return notes_to_be_removed
 
@@ -164,11 +183,6 @@ def handle_name_morphs():
         if re.match(f'[\w,; ]+{morph(note).capitalize()}', text(note)):
             notes_with_name_morphs.append(note)
 
-    showText('\n'.join(
-        mw.col.getNote(note)['TargetMorph']
-        for note in notes_with_name_morphs
-    ))
-
     for note in notes_with_name_morphs:
         note_obj = mw.col.getNote(note)
         note_obj.addTag(mm_already_known_tag)
@@ -176,5 +190,17 @@ def handle_name_morphs():
 
     for note in notes_with_name_morphs:
         mw.col.sched.buryNote(note)
+
+    if notes_with_name_morphs:
+        logging.debug(
+            'notes buried and tagged already known:\n' +
+            debug_note_listing(notes_with_name_morphs)
+        )
+
+def debug_note_listing(notes):
+    return '\n'.join(
+        f'{note} {mw.col.getNote(note)["TargetMorph"]}'
+        for note in notes
+    )
 
 setup_toolbar_menu()
