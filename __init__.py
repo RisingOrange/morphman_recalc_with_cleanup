@@ -139,13 +139,12 @@ def remove_unnecessary_morph_dupes():
         note_to_keep = next(iter(notes_with_same_morph))
         notes_to_be_removed.extend(set(notes_with_same_morph) - set([note_to_keep]))
 
-        mw.col.remNotes(notes_to_be_removed)
-
     if notes_to_be_removed:
         logging.debug(
             'notes removed because of them having morph duplicates:\n' +
             debug_note_listing(notes_to_be_removed)
         )
+        mw.col.remNotes(notes_to_be_removed)
         
     return notes_to_be_removed
 
@@ -183,7 +182,7 @@ def handle_name_morphs():
     for note in notes_to_be_processed:
         # if the morph is capitalized and not at the beginning of a sentence,
         # assume it's a name
-        if re.match(f'[\w,; ]+{morph(note).capitalize()}', text(note)):
+        if re.search(f'[\w,; ]+{morph(note).capitalize()}', text(note)):
             notes_with_name_morphs.append(note)
 
     for note in notes_with_name_morphs:
