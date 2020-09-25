@@ -48,7 +48,7 @@ handler = RotatingFileHandler(
     filename=pathlib.Path(__file__).parent.absolute() / 'log.log',
     mode='w',
     encoding='utf-8',
-    maxBytes=1000,
+    maxBytes=20000,
     backupCount=3,
 )
 handler.setFormatter(logging.Formatter('%(asctime)s-%(message)s'))
@@ -182,7 +182,7 @@ def handle_name_morphs():
     for note in notes_to_be_processed:
         # if the morph is capitalized and not at the beginning of a sentence,
         # assume it's a name
-        if re.search(f'[\w,; ]+{morph(note).capitalize()}', text(note)):
+        if re.search(f'\w[\w,; ]+{morph(note).capitalize()}', text(note)):
             notes_with_name_morphs.append(note)
 
     for note in notes_with_name_morphs:
